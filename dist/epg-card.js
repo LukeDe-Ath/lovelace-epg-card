@@ -94,6 +94,7 @@ class EPGCard extends LitElement {
     for (let i = 0; i <= 24 - startHour; i++) {
       const hour = (startHour + i) % 24;
       timeline.push(`${hour.toString().padStart(2, "0")}:00`);
+      timeline.push(`${hour.toString().padStart(2, "0")}:30`);
     }
 
     return timeline;
@@ -104,21 +105,11 @@ class EPGCard extends LitElement {
     return hours * 60 + minutes;
   }
 
-  _calculatePosition(start) {
+  _calculateGridColumn(timeStr) {
     const now = new Date();
-    const startOfDay = now.getHours() * 60 + now.getMinutes();
-    const startMinutes = this._convertTimeToMinutes(start);
-    const offset = (startMinutes - startOfDay + 1440) % 1440;
-    return (offset / (1440 - startOfDay)) * 100;
-  }
-
-  _calculateWidth(start, end) {
-    const startMin = this._convertTimeToMinutes(start);
-    const endMin = this._convertTimeToMinutes(end);
-    const duration = (endMin - startMin + 1440) % 1440;
-    const now = new Date();
-    const remainingDay = 1440 - (now.getHours() * 60 + now.getMinutes());
-    return (duration / remainingDay) * 100;
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const startMinutes = this._convertTimeToMinutes(timeStr);
+    return Math.floor((startMinutes - currentMinutes) / 30) + 1; // grid is 1-indexed
   }
 
   _calculateEndTime(current, keys) {
@@ -135,19 +126,16 @@ class EPGCard extends LitElement {
         font-family: Arial, sans-serif;
         width: 100%;
         overflow-x: auto;
+        --row-height: 100px;
       }
       .timeline {
-        display: flex;
-        margin-bottom: 10px;
-        padding-left: 10%;
-      }
-      .timeline div {
-        flex: 1;
+        display: grid;
+        margin-left: 10%;
+        grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+        border-bottom: 1px solid #ccc;
         text-align: center;
         font-weight: bold;
-        border-right: 1px solid #ccc;
         padding: 5px 0;
-        min-width: 60px;
       }
       .channel-row {
         display: flex;
@@ -162,22 +150,24 @@ class EPGCard extends LitElement {
         padding-right: 10px;
       }
       .programs {
+        display: grid;
         width: 90%;
-        position: relative;
         height: var(--row-height);
-        display: flex;
+        grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+        position: relative;
       }
       .program {
-        position: absolute;
         background-color: gray;
         color: white;
         border-radius: 4px;
         padding: 5px;
+        font-size: 14px;
+        overflow: hidden;
+        white-space: normal;
+        word-break: break-word;
         display: flex;
         align-items: center;
         justify-content: center;
-        overflow: hidden;
-        font-size: 14px;
         cursor: pointer;
       }
       .program:hover {
@@ -208,11 +198,15 @@ class EPGCard extends LitElement {
     }
 
     const timeline = this._generateTimeline();
+    const totalColumns = timeline.length;
     const rowHeight = this.config.row_height;
 
     return html`
       <div class="epg-card" style="--row-height: ${rowHeight}px;">
-        <div class="timeline">
+        <div
+          class="timeline"
+          style="grid-template-columns: repeat(${totalColumns}, 1fr);"
+        >
           ${timeline.map((t) => html`<div>${t}</div>`)}
         </div>
 
@@ -220,14 +214,17 @@ class EPGCard extends LitElement {
           ([channel, programs]) => html`
             <div class="channel-row">
               <div class="channel-name">${channel}</div>
-              <div class="programs">
-                ${programs.map(
-                  (p) => html`
+              <div
+                class="programs"
+                style="grid-template-columns: repeat(${totalColumns}, 1fr);"
+              >
+                ${programs.map((p) => {
+                  const start = this._calculateGridColumn(p.start);
+                  const end = this._calculateGridColumn(p.end);
+                  return html`
                     <div
                       class="program"
-                      style="left: ${this._calculatePosition(
-                        p.start
-                      )}%; width: ${this._calculateWidth(p.start, p.end)}%;"
+                      style="grid-column: ${start} / ${end};"
                     >
                       ${p.title}
                       <span class="program-tooltip">
@@ -236,8 +233,8 @@ class EPGCard extends LitElement {
                         <div>${p.start} - ${p.end}</div>
                       </span>
                     </div>
-                  `
-                )}
+                  `;
+                })}
               </div>
             </div>
           `
